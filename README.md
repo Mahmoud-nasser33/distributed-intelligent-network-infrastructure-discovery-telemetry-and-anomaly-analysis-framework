@@ -78,37 +78,3 @@ cd backend
 pip install pytest
 pytest tests/ -v
 ```
-
-## Project structure
-
-```
-Dinit/
-├── backend/
-│   ├── app/
-│   │   ├── api/            # REST endpoints
-│   │   ├── models/         # Database models
-│   │   ├── discovery/      # Network scanning
-│   │   ├── telemetry/      # Metric collection
-│   │   ├── anomaly/        # Detection algorithms
-│   │   └── topology/       # Graph building
-│   ├── tests/              # 41 tests
-│   └── run.py              # Start here
-├── frontend/
-│   └── static/             # HTML, CSS, JS (served by Flask)
-│       ├── css/style.css
-│       ├── js/app.js
-│       ├── index.html      # Dashboard
-│       └── *.html          # Other pages
-└── README.md
-```
-
-## Tech
-
-- **Backend:** Python, Flask, SQLAlchemy, SQLite
-- **Frontend:** Plain HTML, CSS, JavaScript (no framework)
-- **Scanning:** ICMP ping, ARP lookup, optional Nmap
-- **Analysis:** Statistical anomaly detection (z-score, thresholds)
-
-## License
-
-MIT
