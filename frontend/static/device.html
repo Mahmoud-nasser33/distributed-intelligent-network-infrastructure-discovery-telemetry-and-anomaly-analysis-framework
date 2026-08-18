@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DINAS - Device</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="sidebar">
+  <h2>DINAS</h2>
+  <nav>
+    <a href="/">Dashboard</a>
+    <a href="/infrastructure.html" class="active">Infrastructure</a>
+    <a href="/topology.html">Topology</a>
+    <a href="/telemetry.html">Telemetry</a>
+    <a href="/anomalies.html">Anomalies</a>
+    <a href="/agents.html">Agents</a>
+    <a href="/discovery.html">Discovery</a>
+  </nav>
+</div>
+
+<div class="main">
+  <p class="subtitle"><a href="/infrastructure.html">Infrastructure</a> &rsaquo; <span id="crumb">Device</span></p>
+  <h1 id="title">Loading...</h1>
+  <div class="cols-2" id="content"></div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+var id = new URLSearchParams(location.search).get('id');
+
+if (!id) {
+  $('content').innerHTML = '<div class="error">No device ID. <a href="/infrastructure.html">Back to Infrastructure</a></div>';
+} else {
+  loading('content', 'Loading device...');
+
+  get('/devices/' + id, function(res) {
+    var d = res.device || res;
+    var services = d.services || [];
+    var ifaces = d.interfaces || d.network_interfaces || [];
+    var obs = res.recent_observations || [];
+
+    $('title').textContent = d.hostname || d.ip_address;
+    $('crumb').textContent = d.hostname || d.ip_address;
+
+    var left = '<div class="box"><div class="box-title">Device Info</div><div style="padding:0 16px">';
+    var rows = [
+      ['Hostname', d.hostname], ['IP Address', d.ip_address], ['MAC', d.mac_address],
+      ['Vendor', d.vendor], ['OS', d.os_detection], ['Type', d.device_type],
+      ['Status', d.status], ['First Seen', time(d.first_seen)], ['Last Seen', time(d.last_seen)]
+    ];
+    rows.forEach(function(r) {
+      left += '<div class="row"><span class="row-label">' + r[0] + '</span><span class="row-value">' + safe(r[1] || '—') + '</span></div>';
+    });
+    left += '</div></div>';
+
+    left += '<div class="box"><div class="box-title">Services (' + services.length + ')</div>';
+    if (!services.length) { left += '<div class="empty">No services detected.</div>'; }
+    else {
+      left += '<table><tr><th>Port</th><th>Proto</th><th>Service</th><th>Version</th></tr>';
+      services.forEach(function(s) {
+        left += '<tr><td><code>' + s.port + '</code></td><td>' + safe(s.protocol) + '</td><td>' + safe(s.service_name || '—') + '</td><td>' + safe(s.version || '—') + '</td></tr>';
+      });
+      left += '</table>';
+    }
+    left += '</div>';
+
+    var right = '<div class="box"><div class="box-title">Interfaces (' + ifaces.length + ')</div>';
+    if (!ifaces.length) { right += '<div class="empty">No interface data.</div>'; }
+    else {
+      right += '<table><tr><th>Name</th><th>MAC</th><th>IP</th></tr>';
+      ifaces.forEach(function(i) {
+        right += '<tr><td>' + safe(i.name || '—') + '</td><td><code>' + safe(i.mac_address || '—') + '</code></td><td><code>' + safe(i.ip_address || '—') + '</code></td></tr>';
+      });
+      right += '</table>';
+    }
+    right += '</div>';
+
+    right += '<div class="box"><div class="box-title">Observations (' + obs.length + ')</div>';
+    if (!obs.length) { right += '<div class="empty">No observations yet.</div>'; }
+    else {
+      right += '<table><tr><th>Type</th><th>Source</th><th>Time</th></tr>';
+      obs.slice(0, 10).forEach(function(o) {
+        right += '<tr><td>' + safe(o.observation_type || '—') + '</td><td>' + safe(o.source || '—') + '</td><td>' + time(o.timestamp) + '</td></tr>';
+      });
+      right += '</table>';
+    }
+    right += '</div>';
+
+    $('content').innerHTML = left + right;
+
+  }, function(e) { error('content', e.message); });
+}
+</script>
+</body>
+</html>

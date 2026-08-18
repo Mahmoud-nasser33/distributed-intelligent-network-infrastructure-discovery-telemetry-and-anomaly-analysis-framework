@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DINAS - Telemetry</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+
+<div class="sidebar">
+  <h2>DINAS</h2>
+  <nav>
+    <a href="/">Dashboard</a>
+    <a href="/infrastructure.html">Infrastructure</a>
+    <a href="/topology.html">Topology</a>
+    <a href="/telemetry.html" class="active">Telemetry</a>
+    <a href="/anomalies.html">Anomalies</a>
+    <a href="/agents.html">Agents</a>
+    <a href="/discovery.html">Discovery</a>
+  </nav>
+</div>
+
+<div class="main">
+  <h1>Telemetry</h1>
+  <p class="subtitle">Performance metrics from network devices</p>
+
+  <div class="box">
+    <div class="box-title">Filters</div>
+    <div style="padding:12px 16px;display:flex;gap:16px;align-items:flex-end">
+      <div><label>Device</label><select id="device-filter" style="width:200px"><option value="">All devices</option></select></div>
+      <div><label>Metric Type</label><select id="metric-filter" style="width:200px"><option value="">All metrics</option></select></div>
+    </div>
+  </div>
+
+  <div class="box">
+    <div class="box-title">Chart</div>
+    <div style="padding:16px"><canvas id="chart" height="300"></canvas></div>
+  </div>
+
+  <div class="box">
+    <div class="box-title">Recent Metrics</div>
+    <div id="table"></div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+var allMetrics = [], allDevices = [], chart = null;
+var devNames = {};
+
+function renderTable() {
+  var dv = $('device-filter').value;
+  var mt = $('metric-filter').value;
+  var list = allMetrics.filter(function(m) {
+    if (dv && m.device_id != dv) return false;
+    if (mt && m.metric_type !== mt) return false;
+    return true;
+  });
+
+  if (!list.length) { empty('table', 'No metrics for selected filters.'); return; }
+
+  var h = '<table><tr><th>Time</th><th>Device</th><th>Metric</th><th>Value</th><th>Source</th></tr>';
+  list.slice(0, 30).forEach(function(m) {
+    h += '<tr><td>' + time(m.timestamp || m.created_at) + '</td>' +
+      '<td>' + safe(devNames[m.device_id] || m.device_id) + '</td>' +
+      '<td>' + safe(m.metric_type || '—') + '</td>' +
+      '<td><code>' + (m.value != null ? m.value : '—') + '</code></td>' +
+      '<td>' + safe(m.source || '—') + '</td></tr>';
+  });
+  $('table').innerHTML = h + '</table>';
+}
+
+function renderChart() {
+  var dv = $('device-filter').value;
+  var mt = $('metric-filter').value;
+  var list = allMetrics.filter(function(m) {
+    if (dv && m.device_id != dv) return false;
+    if (mt && m.metric_type !== mt) return false;
+    return true;
+  });
+
+  // group by time + device
+  var timeMap = {};
+  var deviceIds = {};
+  list.forEach(function(m) {
+    var t = new Date(m.timestamp || m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    if (!timeMap[t]) timeMap[t] = {};
+    timeMap[t][m.device_id] = m.value;
+    deviceIds[m.device_id] = true;
+  });
+
+  var times = Object.keys(timeMap);
+  var devs = Object.keys(deviceIds).slice(0, 6);
+  var colors = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899'];
+
+  var datasets = devs.map(function(did, i) {
+    return {
+      label: devNames[did] || did,
+      data: times.map(function(t) { return timeMap[t][did] || null; }),
+      borderColor: colors[i % colors.length],
+      borderWidth: 1.5,
+      pointRadius: 0,
+      tension: 0.3,
+      fill: false
+    };
+  });
+
+  if (chart) chart.destroy();
+  chart = new Chart($('chart'), {
+    type: 'line',
+    data: { labels: times, datasets: datasets },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: '#9ca3af', font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#6b7280', font: { size: 10 } }, grid: { color: '#2d3748' } },
+        y: { ticks: { color: '#6b7280', font: { size: 10 } }, grid: { color: '#2d3748' } }
+      }
+    }
+  });
+}
+
+$('device-filter').onchange = function() { renderTable(); renderChart(); };
+$('metric-filter').onchange = function() { renderTable(); renderChart(); };
+
+loading('table', 'Loading telemetry...');
+
+get('/devices', function(d) {
+  allDevices = d.devices || [];
+  allDevices.forEach(function(d) { devNames[d.id] = d.hostname || d.ip_address; });
+
+  var sel = $('device-filter');
+  allDevices.forEach(function(d) {
+    var opt = document.createElement('option');
+    opt.value = d.id;
+    opt.textContent = d.hostname || d.ip_address;
+    sel.appendChild(opt);
+  });
+
+  // fetch metrics for each device
+  var promises = allDevices.slice(0, 20).map(function(d) {
+    return new Promise(function(resolve) {
+      get('/telemetry/' + d.id + '?limit=100', function(r) {
+        resolve((r.metrics || []).map(function(m) { m.device_name = devNames[d.id]; return m; }));
+      }, function() { resolve([]); });
+    });
+  });
+
+  Promise.all(promises).then(function(results) {
+    allMetrics = [];
+    results.forEach(function(arr) { allMetrics = allMetrics.concat(arr); });
+
+    // populate metric types
+    var types = {};
+    allMetrics.forEach(function(m) { if (m.metric_type) types[m.metric_type] = true; });
+    var msel = $('metric-filter');
+    Object.keys(types).forEach(function(t) {
+      var opt = document.createElement('option');
+      opt.value = t;
+      opt.textContent = t;
+      msel.appendChild(opt);
+    });
+
+    renderTable();
+    renderChart();
+  });
+}, function(e) { error('table', e.message); });
+</script>
+</body>
+</html>

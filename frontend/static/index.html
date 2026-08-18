@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DINAS - Dashboard</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="sidebar">
+  <h2>DINAS</h2>
+  <nav>
+    <a href="/" class="active">Dashboard</a>
+    <a href="/infrastructure.html">Infrastructure</a>
+    <a href="/topology.html">Topology</a>
+    <a href="/telemetry.html">Telemetry</a>
+    <a href="/anomalies.html">Anomalies</a>
+    <a href="/agents.html">Agents</a>
+    <a href="/discovery.html">Discovery</a>
+  </nav>
+</div>
+
+<div class="main">
+  <h1>Dashboard</h1>
+  <p class="subtitle">System overview and recent activity</p>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="cols-2">
+    <div class="box">
+      <div class="box-title">Recent Devices <a href="/infrastructure.html" class="btn btn-ghost btn-sm">View all</a></div>
+      <div id="devices"></div>
+    </div>
+    <div class="box">
+      <div class="box-title">Open Anomalies <a href="/anomalies.html" class="btn btn-ghost btn-sm">View all</a></div>
+      <div id="anomalies"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+loading('devices', 'Loading...');
+loading('anomalies', 'Loading...');
+
+get('/devices', function(d) {
+  var devices = d.devices || [];
+
+  get('/anomalies?status=open&limit=10', function(a) {
+    var anomalies = a.anomalies || [];
+
+    var online = devices.filter(function(d) { return d.status === 'online'; }).length;
+    var offline = devices.filter(function(d) { return d.status === 'offline'; }).length;
+
+    $('stats').innerHTML =
+      '<div class="stat"><small>Devices</small><strong>' + devices.length + '</strong></div>' +
+      '<div class="stat"><small>Online</small><strong>' + online + '</strong></div>' +
+      '<div class="stat"><small>Offline</small><strong>' + offline + '</strong></div>' +
+      '<div class="stat"><small>Open Anomalies</small><strong>' + anomalies.length + '</strong></div>';
+
+    if (!devices.length) { empty('devices', 'No devices discovered yet.'); }
+    else {
+      var h = '<table><tr><th>Hostname</th><th>IP</th><th>Status</th></tr>';
+      devices.slice(0, 8).forEach(function(d) {
+        h += '<tr class="clickable" onclick="location.href=\'/device.html?id=' + d.id + '\'">' +
+          '<td>' + safe(d.hostname || '—') + '</td>' +
+          '<td><code>' + safe(d.ip_address) + '</code></td>' +
+          '<td>' + badge(d.status) + '</td></tr>';
+      });
+      $('devices').innerHTML = h + '</table>';
+    }
+
+    if (!anomalies.length) { empty('anomalies', 'No open anomalies.'); }
+    else {
+      var h = '<table><tr><th>Detector</th><th>Severity</th></tr>';
+      anomalies.slice(0, 8).forEach(function(a) {
+        h += '<tr><td>' + safe(a.detector || '—') + '</td><td>' + badge(a.severity) + '</td></tr>';
+      });
+      $('anomalies').innerHTML = h + '</table>';
+    }
+  }, function(e) { error('anomalies', e.message); });
+}, function(e) { error('devices', e.message); });
+</script>
+</body>
+</html>

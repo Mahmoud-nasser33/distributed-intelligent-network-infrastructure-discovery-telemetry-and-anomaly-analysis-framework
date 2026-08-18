@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DINAS - Topology</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="sidebar">
+  <h2>DINAS</h2>
+  <nav>
+    <a href="/">Dashboard</a>
+    <a href="/infrastructure.html">Infrastructure</a>
+    <a href="/topology.html" class="active">Topology</a>
+    <a href="/telemetry.html">Telemetry</a>
+    <a href="/anomalies.html">Anomalies</a>
+    <a href="/agents.html">Agents</a>
+    <a href="/discovery.html">Discovery</a>
+  </nav>
+</div>
+
+<div class="main">
+  <h1>Network Topology</h1>
+  <p class="subtitle">Force-directed graph of discovered devices</p>
+
+  <div class="box">
+    <div class="box-title">Graph <button class="btn btn-ghost btn-sm" onclick="resetView()">Reset View</button></div>
+    <div id="graph" style="overflow:hidden">
+      <div class="loading"><div class="spinner"></div><p>Loading topology...</p></div>
+    </div>
+  </div>
+
+  <div id="detail" style="display:none" class="box">
+    <div class="box-title">Selected Device <button class="btn btn-ghost btn-sm" onclick="$('detail').style.display='none'">Close</button></div>
+    <div id="detail-body" style="padding:16px"></div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+var svg, nodes = [], edges = [], zoom = 1, panX = 0, panY = 0;
+var dragging = null, panning = null;
+
+var COLORS = { router:'#3b82f6', switch:'#8b5cf6', server:'#10b981', workstation:'#6b7280', access_point:'#f59e0b', unknown:'#4b5563' };
+
+function resetView() { zoom = 1; panX = 0; panY = 0; draw(); }
+
+function draw() {
+  if (!svg) return;
+  var h = '';
+  h += '<g transform="translate(' + panX + ',' + panY + ') scale(' + zoom + ')">';
+
+  edges.forEach(function(e) {
+    var s = nodes.find(function(n) { return n.id == e.source || n.id == e.source_node_id; });
+    var t = nodes.find(function(n) { return n.id == e.target || n.id == e.destination_node_id; });
+    if (!s || !t) return;
+    h += '<line x1="' + s.x + '" y1="' + s.y + '" x2="' + t.x + '" y2="' + t.y + '" stroke="#374151" stroke-width="1.5"/>';
+  });
+
+  nodes.forEach(function(n) {
+    var col = COLORS[n.type || n.node_type] || COLORS.unknown;
+    var label = n.label || n.hostname || n.ip_address || ('Node ' + n.id);
+    h += '<g data-id="' + n.id + '" style="cursor:pointer">';
+    h += '<circle cx="' + n.x + '" cy="' + n.y + '" r="24" fill="' + col + '" stroke="#1f2937" stroke-width="2"/>';
+    h += '<text x="' + n.x + '" y="' + n.y + '" text-anchor="middle" dy="0.35em" fill="white" font-size="10" font-weight="600">' + safe(label.slice(0, 5)) + '</text>';
+    h += '<text x="' + n.x + '" y="' + (n.y + 36) + '" text-anchor="middle" fill="#9ca3af" font-size="10">' + safe(label) + '</text>';
+    h += '</g>';
+  });
+
+  h += '</g>';
+  svg.innerHTML = h;
+
+  svg.querySelectorAll('[data-id]').forEach(function(g) {
+    g.addEventListener('mousedown', function(ev) {
+      ev.stopPropagation();
+      var id = g.getAttribute('data-id');
+      var n = nodes.find(function(n) { return n.id == id; });
+      if (n) dragging = { node: n, ox: ev.offsetX / zoom - panX / zoom - n.x, oy: ev.offsetY / zoom - panY / zoom - n.y };
+    });
+    g.addEventListener('click', function() {
+      var id = g.getAttribute('data-id');
+      showDetail(id);
+    });
+  });
+}
+
+function showDetail(id) {
+  var n = nodes.find(function(n) { return n.id == id; });
+  if (!n) return;
+  $('detail').style.display = 'block';
+  $('detail-body').innerHTML =
+    '<div class="row"><span class="row-label">Label</span><span class="row-value">' + safe(n.label || n.hostname || '—') + '</span></div>' +
+    '<div class="row"><span class="row-label">Type</span><span class="row-value">' + safe(n.type || n.node_type || '—') + '</span></div>' +
+    '<div class="row"><span class="row-label">IP</span><span class="row-value">' + safe(n.ip_address || '—') + '</span></div>';
+}
+
+document.addEventListener('mousemove', function(ev) {
+  if (dragging) {
+    dragging.node.x = ev.offsetX / zoom - panX / zoom - dragging.ox;
+    dragging.node.y = ev.offsetY / zoom - panY / zoom - dragging.oy;
+    draw();
+  }
+  if (panning) {
+    panX = panning.sx + (ev.clientX - panning.cx);
+    panY = panning.sy + (ev.clientY - panning.cy);
+    draw();
+  }
+});
+
+document.addEventListener('mouseup', function() { dragging = null; panning = null; });
+
+function init() {
+  svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', '500');
+  svg.style.cursor = 'grab';
+  $('graph').innerHTML = '';
+  $('graph').appendChild(svg);
+
+  svg.addEventListener('mousedown', function(ev) {
+    if (ev.target === svg) {
+      panning = { cx: ev.clientX, cy: ev.clientY, sx: panX, sy: panY };
+    }
+  });
+
+  svg.addEventListener('wheel', function(ev) {
+    ev.preventDefault();
+    zoom *= ev.deltaY < 0 ? 1.1 : 0.9;
+    zoom = Math.max(0.2, Math.min(4, zoom));
+    draw();
+  });
+}
+
+get('/topology', function(d) {
+  nodes = (d.nodes || []).map(function(n, i) {
+    return {
+      id: n.id || n.device_id || i,
+      label: n.label || n.hostname || n.ip_address || 'Node ' + i,
+      type: n.type || n.node_type || 'unknown',
+      x: n.x_position || 100 + (i % 5) * 150,
+      y: n.y_position || 100 + Math.floor(i / 5) * 120
+    };
+  });
+  edges = d.edges || [];
+
+  if (!nodes.length) {
+    $('graph').innerHTML = '<div class="empty">No topology data. Ensure devices and agents are reporting.</div>';
+    return;
+  }
+
+  init();
+
+  // Simple force simulation
+  function tick() {
+    for (var i = 0; i < nodes.length; i++) {
+      for (var j = i + 1; j < nodes.length; j++) {
+        var dx = nodes[j].x - nodes[i].x;
+        var dy = nodes[j].y - nodes[i].y;
+        var dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        var f = 600 / (dist * dist);
+        nodes[i].vx = (nodes[i].vx || 0) - (dx / dist) * f;
+        nodes[i].vy = (nodes[i].vy || 0) - (dy / dist) * f;
+        nodes[j].vx = (nodes[j].vx || 0) + (dx / dist) * f;
+        nodes[j].vy = (nodes[j].vy || 0) + (dy / dist) * f;
+      }
+      // center gravity
+      nodes[i].vx = ((nodes[i].vx || 0) + (400 - nodes[i].x) * 0.001) * 0.9;
+      nodes[i].vy = ((nodes[i].vy || 0) + (300 - nodes[i].y) * 0.001) * 0.9;
+      nodes[i].x += nodes[i].vx;
+      nodes[i].y += nodes[i].vy;
+      nodes[i].x = Math.max(40, Math.min(760, nodes[i].x));
+      nodes[i].y = Math.max(40, Math.min(560, nodes[i].y));
+    }
+    draw();
+  }
+
+  var sim = setInterval(tick, 30);
+  setTimeout(function() { clearInterval(sim); }, 3000);
+
+}, function(e) { error('graph', e.message); });
+</script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DINAS - Infrastructure</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="sidebar">
+  <h2>DINAS</h2>
+  <nav>
+    <a href="/">Dashboard</a>
+    <a href="/infrastructure.html" class="active">Infrastructure</a>
+    <a href="/topology.html">Topology</a>
+    <a href="/telemetry.html">Telemetry</a>
+    <a href="/anomalies.html">Anomalies</a>
+    <a href="/agents.html">Agents</a>
+    <a href="/discovery.html">Discovery</a>
+  </nav>
+</div>
+
+<div class="main">
+  <h1>Infrastructure</h1>
+  <p class="subtitle" id="subtitle">Loading...</p>
+
+  <div class="box">
+    <div style="padding:8px 16px;border-bottom:1px solid #2d3748">
+      <input type="text" id="search" placeholder="Search hostname, IP, OS..." style="width:300px">
+    </div>
+    <div id="table"></div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+var allDevices = [];
+
+function render(q) {
+  var list = allDevices;
+  if (q) {
+    var l = q.toLowerCase();
+    list = allDevices.filter(function(d) {
+      return (d.hostname || '').toLowerCase().indexOf(l) >= 0 ||
+             (d.ip_address || '').toLowerCase().indexOf(l) >= 0 ||
+             (d.os_detection || '').toLowerCase().indexOf(l) >= 0;
+    });
+  }
+
+  if (!list.length) { empty('table', 'No devices found.'); return; }
+
+  var h = '<table><tr><th>Hostname</th><th>IP</th><th>OS</th><th>Type</th><th>Status</th><th>Last Seen</th></tr>';
+  list.forEach(function(d) {
+    h += '<tr class="clickable" onclick="location.href=\'/device.html?id=' + d.id + '\'">' +
+      '<td>' + safe(d.hostname || '—') + '</td>' +
+      '<td><code>' + safe(d.ip_address) + '</code></td>' +
+      '<td>' + safe(d.os_detection || '—') + '</td>' +
+      '<td>' + safe(d.device_type || '—') + '</td>' +
+      '<td>' + badge(d.status) + '</td>' +
+      '<td>' + time(d.last_seen) + '</td></tr>';
+  });
+  $('table').innerHTML = h + '</table>';
+}
+
+loading('table', 'Loading devices...');
+
+get('/devices', function(d) {
+  allDevices = d.devices || [];
+  $('subtitle').textContent = allDevices.length + ' devices discovered';
+  render('');
+}, function(e) { error('table', e.message); });
+
+$('search').oninput = function() { render(this.value); };
+</script>
+</body>
+</html>

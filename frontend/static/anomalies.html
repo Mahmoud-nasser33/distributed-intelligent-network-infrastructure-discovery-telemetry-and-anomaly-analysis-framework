@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DINAS - Anomalies</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="sidebar">
+  <h2>DINAS</h2>
+  <nav>
+    <a href="/">Dashboard</a>
+    <a href="/infrastructure.html">Infrastructure</a>
+    <a href="/topology.html">Topology</a>
+    <a href="/telemetry.html">Telemetry</a>
+    <a href="/anomalies.html" class="active">Anomalies</a>
+    <a href="/agents.html">Agents</a>
+    <a href="/discovery.html">Discovery</a>
+  </nav>
+</div>
+
+<div class="main">
+  <h1>Anomalies</h1>
+  <p class="subtitle">Detected deviations from normal behavior</p>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="box">
+    <div style="padding:10px 16px;display:flex;gap:12px;align-items:flex-end">
+      <div><label>Status</label><select id="status-filter"><option value="">All</option><option value="open">Open</option><option value="investigating">Investigating</option><option value="resolved">Resolved</option><option value="false_positive">False Positive</option></select></div>
+      <div><label>Severity</label><select id="severity-filter"><option value="">All</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
+    </div>
+  </div>
+
+  <div class="box">
+    <div class="box-title">Anomalies</div>
+    <div id="table"></div>
+  </div>
+
+  <div id="detail" style="display:none" class="box">
+    <div class="box-title">Anomaly Detail <button class="btn btn-ghost btn-sm" onclick="$('detail').style.display='none'">Close</button></div>
+    <div id="detail-body" style="padding:16px"></div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+var allAnomalies = [];
+
+function load() {
+  loading('table', 'Loading anomalies...');
+  var params = [];
+  var sv = $('status-filter').value;
+  var sev = $('severity-filter').value;
+  if (sv) params.push('status=' + sv);
+  if (sev) params.push('severity=' + sev);
+  params.push('limit=200');
+
+  get('/anomalies?' + params.join('&'), function(d) {
+    allAnomalies = d.anomalies || [];
+
+    var open = allAnomalies.filter(function(a) { return a.status === 'open'; }).length;
+    var crit = allAnomalies.filter(function(a) { return a.severity === 'critical'; }).length;
+    var high = allAnomalies.filter(function(a) { return a.severity === 'high'; }).length;
+
+    $('stats').innerHTML =
+      '<div class="stat"><small>Total</small><strong>' + allAnomalies.length + '</strong></div>' +
+      '<div class="stat"><small>Open</small><strong>' + open + '</strong></div>' +
+      '<div class="stat"><small>Critical</small><strong>' + crit + '</strong></div>' +
+      '<div class="stat"><small>High</small><strong>' + high + '</strong></div>';
+
+    if (!allAnomalies.length) { empty('table', 'No anomalies detected.'); return; }
+
+    var h = '<table><tr><th>Severity</th><th>Detector</th><th>Summary</th><th>Status</th><th>Detected</th></tr>';
+    allAnomalies.forEach(function(a, i) {
+      h += '<tr class="clickable" onclick="showDetail(' + i + ')">' +
+        '<td>' + badge(a.severity) + '</td>' +
+        '<td>' + safe(a.detector || '—') + '</td>' +
+        '<td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + safe(a.summary || a.explanation || '—') + '</td>' +
+        '<td>' + badge(a.status) + '</td>' +
+        '<td>' + time(a.created_at || a.detected_at) + '</td></tr>';
+    });
+    $('table').innerHTML = h + '</table>';
+  }, function(e) { error('table', e.message); });
+}
+
+function showDetail(i) {
+  var a = allAnomalies[i];
+  if (!a) return;
+  $('detail').style.display = 'block';
+  var h = '<div class="cols-2"><div>';
+  var rows = [
+    ['Detector', a.detector], ['Severity', a.severity], ['Status', a.status],
+    ['Metric', a.metric_type], ['Observed', a.observed_value], ['Expected', a.expected_value],
+    ['Threshold', a.threshold], ['Detected', time(a.created_at || a.detected_at)]
+  ];
+  rows.forEach(function(r) {
+    h += '<div class="row"><span class="row-label">' + r[0] + '</span><span class="row-value">' + safe(String(r[1] != null ? r[1] : '—')) + '</span></div>';
+  });
+  h += '</div><div>';
+  h += '<p style="margin-bottom:12px">' + safe(a.summary || 'No summary.') + '</p>';
+  if (a.explanation) h += '<p>' + safe(a.explanation) + '</p>';
+  if (a.evidence) {
+    h += '<pre style="background:#111827;border:1px solid #374151;border-radius:5px;padding:10px;font-size:11px;overflow:auto;max-height:200px;margin-top:12px">' +
+      safe(typeof a.evidence === 'string' ? a.evidence : JSON.stringify(a.evidence, null, 2)) + '</pre>';
+  }
+  h += '</div></div>';
+  $('detail-body').innerHTML = h;
+}
+
+$('status-filter').onchange = load;
+$('severity-filter').onchange = load;
+load();
+</script>
+</body>
+</html>
