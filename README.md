@@ -13,13 +13,13 @@ DINAS scans your network to find devices, keeps track of what's there, collects 
 - Store device info: hostname, IP, OS, services, interfaces
 - Collect basic telemetry (latency, availability)
 - Detect anomalies using statistical methods (z-score, thresholds)
+- Auto-discover network topology (ARP neighbors, subnet adjacency, reachability, traceroute)
 - Show everything in a web dashboard
 
 **What's still in progress:**
 - The distributed agent (runs on remote machines to collect data)
 - Background task processing
 - SNMP telemetry
-- Topology auto-discovery
 
 ## Setup
 
@@ -78,3 +78,35 @@ cd backend
 pip install pytest
 pytest tests/ -v
 ```
+
+## Project structure
+
+```
+Dinit/
+├── backend/
+│   ├── app/
+│   │   ├── api/            # REST endpoints
+│   │   ├── models/         # Database models
+│   │   ├── discovery/      # Network scanning
+│   │   ├── telemetry/      # Metric collection
+│   │   ├── anomaly/        # Detection algorithms
+│   │   └── topology/       # Graph building & auto-discovery
+│   │       └── discovery/  # Topology discovery providers
+│   ├── tests/              # 66 tests
+│   └── run.py              # Start here
+├── frontend/
+│   └── static/             # HTML, CSS, JS (served by Flask)
+│       ├── css/style.css
+│       ├── js/app.js
+│       ├── index.html      # Dashboard
+│       └── *.html          # Other pages
+└── README.md
+```
+
+## Tech
+
+- **Backend:** Python, Flask, SQLAlchemy, SQLite
+- **Frontend:** Plain HTML, CSS, JavaScript (no framework)
+- **Scanning:** ICMP ping, ARP lookup, optional Nmap
+- **Topology:** ARP neighbors, subnet adjacency, reachability, traceroute
+- **Analysis:** Statistical anomaly detection (z-score, thresholds)

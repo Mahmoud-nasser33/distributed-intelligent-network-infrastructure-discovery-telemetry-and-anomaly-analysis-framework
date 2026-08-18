@@ -29,6 +29,11 @@ class Config:
     ANOMALY_LATENCY_THRESHOLD = float(os.environ.get("ANOMALY_LATENCY_THRESHOLD", "3.0"))
     ANOMALY_MIN_SAMPLES = int(os.environ.get("ANOMALY_MIN_SAMPLES", "10"))
 
+    TOPOLOGY_PING_TIMEOUT = int(os.environ.get("TOPOLOGY_PING_TIMEOUT", "2"))
+    TOPOLOGY_MAX_CONCURRENT = int(os.environ.get("TOPOLOGY_MAX_CONCURRENT", "10"))
+    TOPOLOGY_TRACEROUTE_HOPS = int(os.environ.get("TOPOLOGY_TRACEROUTE_HOPS", "15"))
+    TOPOLOGY_TRACEROUTE_TIMEOUT = int(os.environ.get("TOPOLOGY_TRACEROUTE_TIMEOUT", "5"))
+
 
 class DevelopmentConfig(Config):
     DEBUG = True

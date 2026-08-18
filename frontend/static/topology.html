@@ -22,18 +22,42 @@
 
 <div class="main">
   <h1>Network Topology</h1>
-  <p class="subtitle">Force-directed graph of discovered devices</p>
+  <p class="subtitle">Interactive graph of discovered devices and their relationships</p>
 
   <div class="box">
-    <div class="box-title">Graph <button class="btn btn-ghost btn-sm" onclick="resetView()">Reset View</button></div>
+    <div class="box-title">
+      Controls
+      <button class="btn btn-ghost btn-sm" onclick="resetView()">Reset View</button>
+      <button class="btn btn-primary btn-sm" onclick="autoDiscover()" id="discover-btn">Auto-Discover</button>
+    </div>
+    <div style="padding:8px 16px; display:flex; gap:16px; align-items:center; flex-wrap:wrap">
+      <div style="display:flex; gap:8px; align-items:center">
+        <span style="color:#9ca3af; font-size:12px">Edges:</span>
+        <span class="edge-legend" style="color:#10b981">&#9644; ARP</span>
+        <span class="edge-legend" style="color:#3b82f6">&#9644; Subnet</span>
+        <span class="edge-legend" style="color:#f59e0b">&#9644; Reachable</span>
+        <span class="edge-legend" style="color:#8b5cf6">&#9644; Traceroute</span>
+        <span class="edge-legend" style="color:#6b7280">&#9644; Service</span>
+      </div>
+      <div id="discover-status" style="color:#9ca3af; font-size:12px"></div>
+    </div>
+  </div>
+
+  <div class="box">
+    <div class="box-title">Graph</div>
     <div id="graph" style="overflow:hidden">
       <div class="loading"><div class="spinner"></div><p>Loading topology...</p></div>
     </div>
   </div>
 
   <div id="detail" style="display:none" class="box">
-    <div class="box-title">Selected Device <button class="btn btn-ghost btn-sm" onclick="$('detail').style.display='none'">Close</button></div>
+    <div class="box-title">Selected Node <button class="btn btn-ghost btn-sm" onclick="$('detail').style.display='none'">Close</button></div>
     <div id="detail-body" style="padding:16px"></div>
+  </div>
+
+  <div id="edge-detail" style="display:none" class="box">
+    <div class="box-title">Edge Details <button class="btn btn-ghost btn-sm" onclick="$('edge-detail').style.display='none'">Close</button></div>
+    <div id="edge-detail-body" style="padding:16px"></div>
   </div>
 </div>
 
@@ -42,24 +66,74 @@
 var svg, nodes = [], edges = [], zoom = 1, panX = 0, panY = 0;
 var dragging = null, panning = null;
 
-var COLORS = { router:'#3b82f6', switch:'#8b5cf6', server:'#10b981', workstation:'#6b7280', access_point:'#f59e0b', unknown:'#4b5563' };
+var NODE_COLORS = { router:'#3b82f6', switch:'#8b5cf6', server:'#10b981', workstation:'#6b7280', access_point:'#f59e0b', unknown:'#4b5563' };
+var EDGE_COLORS = { arp_neighbor:'#10b981', subnet_adjacent:'#3b82f6', reachable:'#f59e0b', traceroute_hop:'#8b5cf6', service_match:'#6b7280' };
+var EDGE_WIDTH = { arp_neighbor:2.5, subnet_adjacent:2, reachable:1.5, traceroute_hop:1, service_match:1 };
 
 function resetView() { zoom = 1; panX = 0; panY = 0; draw(); }
+
+function autoDiscover() {
+  var btn = $('discover-btn');
+  var status = $('discover-status');
+  btn.disabled = true;
+  btn.textContent = 'Discovering...';
+  status.textContent = 'Running topology discovery across all providers...';
+
+  post('/topology/discover', {}, function(d) {
+    btn.disabled = false;
+    btn.textContent = 'Auto-Discover';
+    var count = d.discovered_edges || 0;
+    status.textContent = 'Discovery complete: ' + count + ' new edge(s) found.';
+    loadTopology();
+  }, function(e) {
+    btn.disabled = false;
+    btn.textContent = 'Auto-Discover';
+    status.textContent = 'Discovery failed: ' + e.message;
+  });
+}
+
+function loadTopology() {
+  get('/topology', function(d) {
+    nodes = (d.nodes || []).map(function(n, i) {
+      return {
+        id: n.id || n.device_id || i,
+        label: n.label || n.hostname || n.ip_address || 'Node ' + i,
+        type: n.type || n.node_type || 'unknown',
+        device_id: n.device_id,
+        x: n.x_position || 100 + (i % 6) * 130,
+        y: n.y_position || 100 + Math.floor(i / 6) * 110
+      };
+    });
+    edges = d.edges || [];
+
+    if (!nodes.length) {
+      $('graph').innerHTML = '<div class="empty">No topology data. Click "Auto-Discover" or build topology first.</div>';
+      return;
+    }
+
+    init();
+    runSimulation();
+  }, function(e) { error('graph', e.message); });
+}
 
 function draw() {
   if (!svg) return;
   var h = '';
   h += '<g transform="translate(' + panX + ',' + panY + ') scale(' + zoom + ')">';
 
-  edges.forEach(function(e) {
-    var s = nodes.find(function(n) { return n.id == e.source || n.id == e.source_node_id; });
-    var t = nodes.find(function(n) { return n.id == e.target || n.id == e.destination_node_id; });
+  edges.forEach(function(e, idx) {
+    var s = nodes.find(function(n) { return n.id == e.source_node_id; });
+    var t = nodes.find(function(n) { return n.id == e.destination_node_id; });
     if (!s || !t) return;
-    h += '<line x1="' + s.x + '" y1="' + s.y + '" x2="' + t.x + '" y2="' + t.y + '" stroke="#374151" stroke-width="1.5"/>';
+    var col = EDGE_COLORS[e.edge_type] || '#374151';
+    var w = EDGE_WIDTH[e.edge_type] || 1.5;
+    var dash = e.edge_type === 'traceroute_hop' ? ' stroke-dasharray="4,3"' : '';
+    var opacity = e.confidence ? ' opacity="' + Math.max(0.3, e.confidence) + '"' : '';
+    h += '<line data-edge-idx="' + idx + '" x1="' + s.x + '" y1="' + s.y + '" x2="' + t.x + '" y2="' + t.y + '" stroke="' + col + '" stroke-width="' + w + '"' + dash + opacity + ' style="cursor:pointer"/>';
   });
 
   nodes.forEach(function(n) {
-    var col = COLORS[n.type || n.node_type] || COLORS.unknown;
+    var col = NODE_COLORS[n.type || n.node_type] || NODE_COLORS.unknown;
     var label = n.label || n.hostname || n.ip_address || ('Node ' + n.id);
     h += '<g data-id="' + n.id + '" style="cursor:pointer">';
     h += '<circle cx="' + n.x + '" cy="' + n.y + '" r="24" fill="' + col + '" stroke="#1f2937" stroke-width="2"/>';
@@ -80,19 +154,70 @@ function draw() {
     });
     g.addEventListener('click', function() {
       var id = g.getAttribute('data-id');
-      showDetail(id);
+      showNodeDetail(id);
+    });
+  });
+
+  svg.querySelectorAll('[data-edge-idx]').forEach(function(line) {
+    line.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      var idx = parseInt(line.getAttribute('data-edge-idx'));
+      showEdgeDetail(idx);
     });
   });
 }
 
-function showDetail(id) {
+function showNodeDetail(id) {
   var n = nodes.find(function(n) { return n.id == id; });
   if (!n) return;
   $('detail').style.display = 'block';
+  $('edge-detail').style.display = 'none';
+
+  var connEdges = edges.filter(function(e) { return e.source_node_id == id || e.destination_node_id == id; });
+  var connHtml = '<div style="margin-top:12px"><strong>Connections (' + connEdges.length + ')</strong></div>';
+  connEdges.forEach(function(e) {
+    var peer_id = e.source_node_id == id ? e.destination_node_id : e.source_node_id;
+    var peer = nodes.find(function(n) { return n.id == peer_id; });
+    var peerLabel = peer ? (peer.label || peer.ip_address || peer_id) : peer_id;
+    var col = EDGE_COLORS[e.edge_type] || '#374151';
+    connHtml += '<div style="padding:4px 0; font-size:12px; color:' + col + '">' +
+      '&#9644; ' + safe(e.edge_type) + ' &rarr; ' + safe(peerLabel) +
+      ' <span style="color:#6b7280">(conf: ' + (e.confidence || '?') + ')</span></div>';
+  });
+
   $('detail-body').innerHTML =
-    '<div class="row"><span class="row-label">Label</span><span class="row-value">' + safe(n.label || n.hostname || '—') + '</span></div>' +
+    '<div class="row"><span class="row-label">Label</span><span class="row-value">' + safe(n.label || '—') + '</span></div>' +
     '<div class="row"><span class="row-label">Type</span><span class="row-value">' + safe(n.type || n.node_type || '—') + '</span></div>' +
-    '<div class="row"><span class="row-label">IP</span><span class="row-value">' + safe(n.ip_address || '—') + '</span></div>';
+    '<div class="row"><span class="row-label">ID</span><span class="row-value" style="font-size:11px">' + safe(n.id) + '</span></div>' +
+    connHtml;
+}
+
+function showEdgeDetail(idx) {
+  var e = edges[idx];
+  if (!e) return;
+  $('edge-detail').style.display = 'block';
+  $('detail').style.display = 'none';
+
+  var src = nodes.find(function(n) { return n.id == e.source_node_id; });
+  var dst = nodes.find(function(n) { return n.id == e.destination_node_id; });
+  var srcLabel = src ? (src.label || src.ip_address) : e.source_node_id;
+  var dstLabel = dst ? (dst.label || dst.ip_address) : e.destination_node_id;
+
+  var evHtml = '';
+  if (e.evidence) {
+    Object.keys(e.evidence).forEach(function(k) {
+      evHtml += '<div class="row"><span class="row-label">' + safe(k) + '</span><span class="row-value">' + safe(String(e.evidence[k])) + '</span></div>';
+    });
+  }
+
+  $('edge-detail-body').innerHTML =
+    '<div class="row"><span class="row-label">Type</span><span class="row-value" style="color:' + (EDGE_COLORS[e.edge_type] || '#fff') + '">' + safe(e.edge_type) + '</span></div>' +
+    '<div class="row"><span class="row-label">From</span><span class="row-value">' + safe(srcLabel) + '</span></div>' +
+    '<div class="row"><span class="row-label">To</span><span class="row-value">' + safe(dstLabel) + '</span></div>' +
+    '<div class="row"><span class="row-label">Confidence</span><span class="row-value">' + (e.confidence || '—') + '</span></div>' +
+    '<div class="row"><span class="row-label">First Seen</span><span class="row-value">' + safe(e.first_seen || '—') + '</span></div>' +
+    '<div class="row"><span class="row-label">Last Seen</span><span class="row-value">' + safe(e.last_seen || '—') + '</span></div>' +
+    (evHtml ? '<div style="margin-top:8px"><strong>Evidence</strong></div>' + evHtml : '');
 }
 
 document.addEventListener('mousemove', function(ev) {
@@ -132,53 +257,43 @@ function init() {
   });
 }
 
-get('/topology', function(d) {
-  nodes = (d.nodes || []).map(function(n, i) {
-    return {
-      id: n.id || n.device_id || i,
-      label: n.label || n.hostname || n.ip_address || 'Node ' + i,
-      type: n.type || n.node_type || 'unknown',
-      x: n.x_position || 100 + (i % 5) * 150,
-      y: n.y_position || 100 + Math.floor(i / 5) * 120
-    };
-  });
-  edges = d.edges || [];
-
-  if (!nodes.length) {
-    $('graph').innerHTML = '<div class="empty">No topology data. Ensure devices and agents are reporting.</div>';
-    return;
-  }
-
-  init();
-
-  // Simple force simulation
+function runSimulation() {
   function tick() {
     for (var i = 0; i < nodes.length; i++) {
       for (var j = i + 1; j < nodes.length; j++) {
         var dx = nodes[j].x - nodes[i].x;
         var dy = nodes[j].y - nodes[i].y;
         var dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        var f = 600 / (dist * dist);
+
+        var hasEdge = edges.some(function(e) {
+          return (e.source_node_id == nodes[i].id && e.destination_node_id == nodes[j].id) ||
+                 (e.source_node_id == nodes[j].id && e.destination_node_id == nodes[i].id);
+        });
+
+        var repulse = 800 / (dist * dist);
+        var attract = hasEdge ? dist * 0.005 : 0;
+
+        var f = repulse - attract;
         nodes[i].vx = (nodes[i].vx || 0) - (dx / dist) * f;
         nodes[i].vy = (nodes[i].vy || 0) - (dy / dist) * f;
         nodes[j].vx = (nodes[j].vx || 0) + (dx / dist) * f;
         nodes[j].vy = (nodes[j].vy || 0) + (dy / dist) * f;
       }
-      // center gravity
       nodes[i].vx = ((nodes[i].vx || 0) + (400 - nodes[i].x) * 0.001) * 0.9;
       nodes[i].vy = ((nodes[i].vy || 0) + (300 - nodes[i].y) * 0.001) * 0.9;
       nodes[i].x += nodes[i].vx;
       nodes[i].y += nodes[i].vy;
       nodes[i].x = Math.max(40, Math.min(760, nodes[i].x));
-      nodes[i].y = Math.max(40, Math.min(560, nodes[i].y));
+      nodes[i].y = Math.max(40, Math.min(460, nodes[i].y));
     }
     draw();
   }
 
   var sim = setInterval(tick, 30);
   setTimeout(function() { clearInterval(sim); }, 3000);
+}
 
-}, function(e) { error('graph', e.message); });
+loadTopology();
 </script>
 </body>
 </html>
