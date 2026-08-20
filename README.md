@@ -51,19 +51,6 @@ Go to **http://localhost:5000** in your browser.
 
 That's it. One command starts everything — backend API and the web UI are served from the same place.
 
-## Pages
-
-| Page | What it shows |
-|------|--------------|
-| Dashboard | Overview — device count, online/offline, open anomalies |
-| Infrastructure | All discovered devices in a searchable table |
-| Device Detail | One device — its info, services, interfaces, observations |
-| Topology | Visual graph of device relationships (drag to move, scroll to zoom) |
-| Telemetry | Performance charts and raw metrics |
-| Anomalies | Detected issues — filter by severity and status |
-| Agents | Registered collection agents and their status |
-| Discovery | Run a network scan, see scan history |
-
 ## How to use it
 
 1. Go to **Discovery** page
@@ -79,36 +66,3 @@ cd backend
 pip install pytest
 pytest tests/ -v
 ```
-
-## Project structure
-
-```
-Dinit/
-├── backend/
-│   ├── app/
-│   │   ├── api/            # REST endpoints
-│   │   ├── models/         # Database models
-│   │   ├── discovery/      # Network scanning
-│   │   ├── telemetry/      # Metric collection
-│   │   ├── anomaly/        # Detection algorithms
-│   │   ├── tasks/          # Background task processing & scheduling
-│   │   └── topology/       # Graph building & auto-discovery
-│   │       └── discovery/  # Topology discovery providers
-│   ├── tests/              # 81 tests
-│   └── run.py              # Start here
-├── frontend/
-│   └── static/             # HTML, CSS, JS (served by Flask)
-│       ├── css/style.css
-│       ├── js/app.js
-│       ├── index.html      # Dashboard
-│       └── *.html          # Other pages
-└── README.md
-```
-
-## Tech
-
-- **Backend:** Python, Flask, SQLAlchemy, SQLite
-- **Frontend:** Plain HTML, CSS, JavaScript (no framework)
-- **Scanning:** ICMP ping, ARP lookup, optional Nmap
-- **Topology:** ARP neighbors, subnet adjacency, reachability, traceroute
-- **Analysis:** Statistical anomaly detection (z-score, thresholds)
