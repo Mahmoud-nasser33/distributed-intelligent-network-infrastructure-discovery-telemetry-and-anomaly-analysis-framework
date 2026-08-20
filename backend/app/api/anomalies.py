@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 from app.repositories.anomaly_repo import AnomalyRepository
 from app.repositories.device_repo import DeviceRepository
 from app.anomaly.detectors import AnomalyDetector, ThresholdDetector
@@ -50,6 +50,16 @@ def update_anomaly_status(anomaly_id):
 def detect_anomalies():
     data = request.get_json() or {}
     device_id = data.get("device_id")
+    run_async = data.get("run_async", False)
+
+    if run_async:
+        task_id = current_app.task_manager.submit_anomaly_detection(
+            device_id=device_id,
+        )
+        return jsonify({
+            "task_id": task_id,
+            "message": "Anomaly detection started",
+        }), 202
 
     detector = AnomalyDetector()
     threshold_detector = ThresholdDetector()
@@ -60,15 +70,13 @@ def detect_anomalies():
             raise NotFoundError(f"Device {device_id} not found")
         zscore_anomalies = detector.detect_and_store(device_id)
         threshold_anomalies_data = threshold_detector.check_device(device_id)
-        from app.repositories.anomaly_repo import AnomalyRepository
         for ad in threshold_anomalies_data:
             AnomalyRepository.create(ad)
 
-        all_anomalies = zscore_anomalies
         return jsonify({
             "device_id": device_id,
-            "anomalies_found": len(all_anomalies),
-            "anomalies": [a.to_dict() for a in all_anomalies],
+            "anomalies_found": len(zscore_anomalies),
+            "anomalies": [a.to_dict() for a in zscore_anomalies],
         })
     else:
         from app.models.device import Device

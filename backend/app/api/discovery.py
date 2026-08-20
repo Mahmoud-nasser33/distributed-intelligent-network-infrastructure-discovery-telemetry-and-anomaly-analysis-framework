@@ -1,15 +1,11 @@
-import threading
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 from app.repositories.scan_job_repo import ScanJobRepository
-from app.repositories.agent_repo import AgentRepository
 from app.utils.errors import NotFoundError, ValidationError
 from app.services.discovery_service import DiscoveryOrchestrator
-from flask import current_app
 from app.config.settings import Config
 
 discovery_bp = Blueprint("discovery", __name__)
 
-_lock = threading.Lock()
 _orchestrator = None
 
 
@@ -54,23 +50,17 @@ def create_job():
     })
 
     if data.get("run_async", True):
-        def _run():
-            with current_app.app_context():
-                orch = _get_orchestrator()
-                orch.run_discovery(
-                    scan_job_id=job.id,
-                    target=data["target"],
-                    agent_id=data.get("agent_id"),
-                    scan_type=data.get("scan_type", "host"),
-                    providers=data.get("providers"),
-                    arguments=data.get("scan_arguments"),
-                )
-
-        thread = threading.Thread(target=_run, daemon=True)
-        thread.start()
-
+        task_id = current_app.task_manager.submit_discovery(
+            scan_job_id=job.id,
+            target=data["target"],
+            agent_id=data.get("agent_id"),
+            scan_type=data.get("scan_type", "host"),
+            providers=data.get("providers"),
+            arguments=data.get("scan_arguments"),
+        )
         return jsonify({
             "job": job.to_dict(),
+            "task_id": task_id,
             "message": "Discovery job queued",
         }), 202
     else:

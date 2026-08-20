@@ -1,11 +1,8 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 from app.repositories.metric_repo import MetricRepository
 from app.repositories.device_repo import DeviceRepository
 from app.telemetry.collector import TelemetryCollector
 from app.utils.errors import NotFoundError, ValidationError
-from app.config.database import db
-from flask import current_app
-import threading
 
 telemetry_bp = Blueprint("telemetry", __name__)
 
@@ -59,14 +56,11 @@ def collect_telemetry():
         result = collector.collect_ping_metrics(device.id, device.ip_address)
         return jsonify({"device_id": device_id, "metrics": result})
     else:
-        def _collect():
-            with current_app.app_context():
-                collector = TelemetryCollector()
-                collector.collect_all_devices()
-
-        thread = threading.Thread(target=_collect, daemon=True)
-        thread.start()
-        return jsonify({"message": "Telemetry collection started"}), 202
+        task_id = current_app.task_manager.submit_telemetry_collection()
+        return jsonify({
+            "task_id": task_id,
+            "message": "Telemetry collection started",
+        }), 202
 
 
 @telemetry_bp.route("/telemetry/overview", methods=["GET"])

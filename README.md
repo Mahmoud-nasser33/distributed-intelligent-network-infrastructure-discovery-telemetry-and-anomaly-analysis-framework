@@ -15,10 +15,11 @@ DINAS scans your network to find devices, keeps track of what's there, collects 
 - Detect anomalies using statistical methods (z-score, thresholds)
 - Auto-discover network topology (ARP neighbors, subnet adjacency, reachability, traceroute)
 - Show everything in a web dashboard
+- Run long tasks in background (discovery, telemetry, anomaly detection)
+- Schedule periodic telemetry collection and anomaly detection
 
 **What's still in progress:**
 - The distributed agent (runs on remote machines to collect data)
-- Background task processing
 - SNMP telemetry
 
 ## Setup
@@ -90,9 +91,10 @@ Dinit/
 │   │   ├── discovery/      # Network scanning
 │   │   ├── telemetry/      # Metric collection
 │   │   ├── anomaly/        # Detection algorithms
+│   │   ├── tasks/          # Background task processing & scheduling
 │   │   └── topology/       # Graph building & auto-discovery
 │   │       └── discovery/  # Topology discovery providers
-│   ├── tests/              # 66 tests
+│   ├── tests/              # 81 tests
 │   └── run.py              # Start here
 ├── frontend/
 │   └── static/             # HTML, CSS, JS (served by Flask)

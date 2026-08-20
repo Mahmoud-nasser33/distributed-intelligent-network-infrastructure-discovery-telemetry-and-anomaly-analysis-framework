@@ -34,6 +34,13 @@ def create_app(config_class=None):
     app.register_blueprint(api_bp, url_prefix="/api")
     register_error_handlers(app)
 
+    from app.tasks.manager import TaskManager
+    app.task_manager = TaskManager(app)
+
+    from app.tasks.scheduler import TaskScheduler
+    app.task_scheduler = TaskScheduler()
+    app.task_scheduler.init_app(app)
+
     static_dir = Path(__file__).resolve().parent.parent.parent / "frontend" / "static"
 
     @app.route("/")
@@ -50,5 +57,7 @@ def create_app(config_class=None):
     with app.app_context():
         from app.models import device, observation, agent, telemetry, topology, anomaly, discovery
         db.create_all()
+
+    app.task_scheduler.start()
 
     return app

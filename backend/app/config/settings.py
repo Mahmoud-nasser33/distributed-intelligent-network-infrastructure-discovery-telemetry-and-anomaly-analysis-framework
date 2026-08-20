@@ -34,6 +34,11 @@ class Config:
     TOPOLOGY_TRACEROUTE_HOPS = int(os.environ.get("TOPOLOGY_TRACEROUTE_HOPS", "15"))
     TOPOLOGY_TRACEROUTE_TIMEOUT = int(os.environ.get("TOPOLOGY_TRACEROUTE_TIMEOUT", "5"))
 
+    SCHEDULER_ENABLED = os.environ.get("SCHEDULER_ENABLED", "true").lower() == "true"
+    SCHEDULER_TELEMETRY_INTERVAL = int(os.environ.get("SCHEDULER_TELEMETRY_INTERVAL", "300"))
+    SCHEDULER_ANOMALY_INTERVAL = int(os.environ.get("SCHEDULER_ANOMALY_INTERVAL", "600"))
+    SCHEDULER_CLEANUP_INTERVAL = int(os.environ.get("SCHEDULER_CLEANUP_INTERVAL", "1800"))
+
 
 class DevelopmentConfig(Config):
     DEBUG = True
