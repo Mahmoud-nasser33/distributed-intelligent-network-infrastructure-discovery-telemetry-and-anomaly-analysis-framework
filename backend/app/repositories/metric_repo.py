@@ -15,6 +15,7 @@ class MetricRepository:
             source=data.get("source"),
             agent_id=data.get("agent_id"),
             tags=data.get("tags"),
+            timestamp=data.get("timestamp"),
         )
         db.session.add(metric)
         db.session.commit()

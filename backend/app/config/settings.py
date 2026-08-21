@@ -20,6 +20,8 @@ class Config:
 
     AGENT_HEARTBEAT_INTERVAL = int(os.environ.get("AGENT_HEARTBEAT_INTERVAL", "30"))
     AGENT_TIMEOUT = int(os.environ.get("AGENT_TIMEOUT", "90"))
+    AGENT_COLLECT_INTERVAL = int(os.environ.get("AGENT_COLLECT_INTERVAL", "60"))
+    AGENT_PING_COUNT = int(os.environ.get("AGENT_PING_COUNT", "2"))
 
     DISCOVERY_TIMEOUT = int(os.environ.get("DISCOVERY_TIMEOUT", "300"))
     DISCOVERY_MAX_CONCURRENT = int(os.environ.get("DISCOVERY_MAX_CONCURRENT", "5"))
@@ -38,6 +40,7 @@ class Config:
     SCHEDULER_TELEMETRY_INTERVAL = int(os.environ.get("SCHEDULER_TELEMETRY_INTERVAL", "300"))
     SCHEDULER_ANOMALY_INTERVAL = int(os.environ.get("SCHEDULER_ANOMALY_INTERVAL", "600"))
     SCHEDULER_CLEANUP_INTERVAL = int(os.environ.get("SCHEDULER_CLEANUP_INTERVAL", "1800"))
+    SCHEDULER_AGENT_HEALTH_INTERVAL = int(os.environ.get("SCHEDULER_AGENT_HEALTH_INTERVAL", "60"))
 
 
 class DevelopmentConfig(Config):

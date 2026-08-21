@@ -47,11 +47,22 @@ class TaskScheduler:
             replace_existing=True,
         )
 
+        self.scheduler.add_job(
+            self._check_agent_health,
+            trigger=IntervalTrigger(
+                seconds=config.get("SCHEDULER_AGENT_HEALTH_INTERVAL", 60),
+            ),
+            id="periodic_agent_health",
+            name="Periodic agent health check",
+            replace_existing=True,
+        )
+
         logger.info(
-            "Task scheduler configured: telemetry=%ds, anomaly=%ds, cleanup=%ds",
+            "Task scheduler configured: telemetry=%ds, anomaly=%ds, cleanup=%ds, agent_health=%ds",
             config.get("SCHEDULER_TELEMETRY_INTERVAL", 300),
             config.get("SCHEDULER_ANOMALY_INTERVAL", 600),
             config.get("SCHEDULER_CLEANUP_INTERVAL", 1800),
+            config.get("SCHEDULER_AGENT_HEALTH_INTERVAL", 60),
         )
 
     def start(self):
@@ -104,3 +115,17 @@ class TaskScheduler:
                     logger.info("Cleaned up %d old tasks", removed)
             except Exception as e:
                 logger.error("Task cleanup failed: %s", str(e))
+
+    def _check_agent_health(self):
+        with self.app.app_context():
+            try:
+                from app.repositories.agent_repo import AgentRepository
+
+                timeout = self.app.config.get("AGENT_TIMEOUT", 90)
+                stale = AgentRepository.find_stale(timeout_seconds=timeout)
+                if stale:
+                    AgentRepository.mark_stale([a.id for a in stale])
+                    logger.warning("Marked %d agent(s) as stale: %s",
+                                   len(stale), [a.name for a in stale])
+            except Exception as e:
+                logger.error("Agent health check failed: %s", str(e))
